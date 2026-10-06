@@ -1,0 +1,4 @@
+.env
+diagnostics.json
+__pycache__/
+.venv/

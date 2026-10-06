@@ -1,0 +1,35 @@
+import unittest
+from monitor import extract
+
+
+class CalendarTests(unittest.TestCase):
+    def config(self, verified=True):
+        return {'hours': ['20:00', '21:00', '22:00'], 'availability_verified': verified,
+                'free_text_pattern': r'^Νέα\s+Κράτηση$'}
+
+    def test_free_busy_locked_and_past_are_distinct(self):
+        html = '''<table><tr><th>ΓΗΠΕΔΟ 1</th><th>ΓΗΠΕΔΟ 2</th></tr>
+        <tr><td>20:00 <a>Νέα Κράτηση</a></td><td>20:00 MEMBER NAME</td></tr>
+        <tr><td>21:00 LOCK</td><td>21:00</td></tr></table>'''
+        slots, diagnostics = extract(html, '2099-01-01', self.config())
+        self.assertEqual(slots, [{'date': '2099-01-01', 'court': 'ΓΗΠΕΔΟ 1', 'hour': '20:00'}])
+        self.assertNotIn('MEMBER NAME', str(diagnostics))
+        self.assertEqual(extract(html, '2000-01-01', self.config())[0], [])
+        self.assertEqual(extract(html, '2099-01-01', self.config(False))[0], [])
+
+    def test_separate_time_column_and_colspan(self):
+        html = '''<table><tr><th colspan="3">Ημερολόγιο</th></tr>
+        <tr><th>Ώρα</th><th>ΓΗΠΕΔΟ 1</th><th>ΓΗΠΕΔΟ 2</th></tr>
+        <tr><th>22:00</th><td>Νέα Κράτηση</td><td>LOCK</td></tr></table>'''
+        slots, _ = extract(html, '2099-01-01', self.config())
+        self.assertEqual(len(slots), 1)
+        self.assertEqual(slots[0]['hour'], '22:00')
+
+    def test_login_and_unrecognized_structure_fail(self):
+        for html in ['<form id="login_form"></form>', '<table><tr><td>unknown</td></tr></table>']:
+            with self.assertRaises(RuntimeError):
+                extract(html, '2099-01-01', self.config())
+
+
+if __name__ == '__main__':
+    unittest.main()
