@@ -3,6 +3,15 @@ from monitor import extract, redacted_structure
 
 
 class CalendarTests(unittest.TestCase):
+    def test_live_list_layout_and_explicit_booking_link(self):
+        html = '''<ol><li><ul><li>ΓΗΠΕΔΟ 1</li><li>ΓΗΠΕΔΟ 2</li></ul></li>
+        <li><ul><li>20:00<br><a>Νέα Κράτηση</a></li><li>20:00<ul><li>MEMBER NAME</li></ul></li>
+        <li>21:00</li><li>21:00<ul><li>LOCK</li></ul></li></ul></li></ol>'''
+        slots, detail = extract(html, '2099-01-01', self.config())
+        self.assertEqual(slots, [{'date': '2099-01-01', 'court': 'ΓΗΠΕΔΟ 1', 'hour': '20:00'}])
+        self.assertEqual(len(detail), 4)
+        self.assertNotIn('MEMBER NAME', str(detail))
+
     def test_structure_redacts_names_credentials_and_links(self):
         html = '<table data-token="secret"><tr><td>ΓΗΠΕΔΟ 1</td><td>20:00</td><td><a href="/?token=secret">MEMBER NAME</a></td></tr></table><input value="password"><script>secret</script><!--secret-->'
         result = redacted_structure(html)

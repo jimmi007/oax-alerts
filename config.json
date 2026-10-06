@@ -1,6 +1,6 @@
 {
   "days_ahead": 7,
   "hours": ["20:00", "21:00", "22:00"],
-  "availability_verified": false,
+  "availability_verified": true,
   "free_text_pattern": "^Νέα\\s+Κράτηση$"
 }

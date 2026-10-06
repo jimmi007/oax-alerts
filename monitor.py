@@ -67,6 +67,40 @@ def extract(html, day, config):
     seen = set()
     found = False
     now = datetime.now(ATHENS)
+    # The live calendar uses two sibling ULs inside an OL, not table cells.
+    for header in soup.find_all('ul'):
+        courts = [text(li) for li in header.find_all('li', recursive=False)]
+        if not courts or not all(re.fullmatch(r'ΓΗΠΕΔΟ\s*\d+', c, re.IGNORECASE) for c in courts):
+            continue
+        wrapper = header.find_parent('ol')
+        if wrapper is None:
+            continue
+        lists = [ul for ul in wrapper.find_all('ul') if ul is not header and ul.find_parent('ul') is None]
+        if len(lists) != 1:
+            raise RuntimeError('Ambiguous calendar slot list')
+        cells = lists[0].find_all('li', recursive=False)
+        if len(cells) % len(courts):
+            raise RuntimeError('Calendar slot count does not match court count')
+        for index, cell in enumerate(cells):
+            direct = ' '.join(str(n).strip() for n in cell.find_all(string=True, recursive=False))
+            match = re.match(r'^(\d{1,2}:\d{2})(?:\s|$)', direct.strip())
+            if not match:
+                raise RuntimeError('Calendar slot has no recognizable time')
+            hour = match.group(1).zfill(5)
+            if hour not in config['hours']:
+                continue
+            court = courts[index % len(courts)]
+            # Only a direct, explicit new-booking link establishes availability.
+            free = any(re.fullmatch(r'Νέα\s+Κράτηση', text(a), re.IGNORECASE)
+                       for a in cell.find_all('a', recursive=False))
+            diagnostics.append({'date': day, 'court': court, 'hour': hour,
+                                'explicit_booking_link': free, 'locked': 'LOCK' in text(cell)})
+            start = datetime.fromisoformat(f'{day}T{hour}').replace(tzinfo=ATHENS)
+            if config['availability_verified'] and free and start > now:
+                slots.append({'date': day, 'court': court, 'hour': hour})
+        if not diagnostics:
+            raise RuntimeError('No target hours in calendar list')
+        return slots, diagnostics
     for table in soup.find_all('table'):
         matrix = grid(table)
         for y, row in enumerate(matrix):
@@ -131,6 +165,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--diagnose', action='store_true')
     args = parser.parse_args()
+    if not args.diagnose and not all(os.environ.get(k) for k in ('TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID')):
+        print('Telegram secrets missing: notifications inactive. Use diagnostic mode to test the calendar.')
+        return
     config = json.loads(Path('config.json').read_text())
     days = int(config['days_ahead'])
     if not 1 <= days <= 31:
