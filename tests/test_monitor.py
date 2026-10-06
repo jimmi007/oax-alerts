@@ -1,8 +1,16 @@
 import unittest
-from monitor import extract
+from monitor import extract, redacted_structure
 
 
 class CalendarTests(unittest.TestCase):
+    def test_structure_redacts_names_credentials_and_links(self):
+        html = '<table data-token="secret"><tr><td>ΓΗΠΕΔΟ 1</td><td>20:00</td><td><a href="/?token=secret">MEMBER NAME</a></td></tr></table><input value="password"><script>secret</script><!--secret-->'
+        result = redacted_structure(html)
+        for private in ('secret', 'MEMBER NAME', 'password', 'href'):
+            self.assertNotIn(private, result)
+        self.assertIn('20:00', result)
+        self.assertIn('ΓΗΠΕΔΟ 1', result)
+
     def config(self, verified=True):
         return {'hours': ['20:00', '21:00', '22:00'], 'availability_verified': verified,
                 'free_text_pattern': r'^Νέα\s+Κράτηση$'}

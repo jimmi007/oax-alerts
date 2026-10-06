@@ -1,4 +1,5 @@
 .env
 diagnostics.json
+calendar-structure.html
 __pycache__/
 .venv/

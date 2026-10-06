@@ -40,6 +40,24 @@ def text(cell):
     return ' '.join(cell.stripped_strings) if cell else ''
 
 
+def redacted_structure(html):
+    """Retain layout and known calendar labels, never arbitrary page text/URLs."""
+    soup = BeautifulSoup(html, 'html.parser')
+    for tag in soup.find_all(['script', 'style', 'input', 'textarea', 'meta', 'link', 'img']):
+        tag.decompose()
+    from bs4 import Comment
+    for node in list(soup.find_all(string=True)):
+        if isinstance(node, Comment):
+            node.extract()
+            continue
+        value = ' '.join(str(node).split())
+        allowed = re.fullmatch(r'(?:ΓΗΠΕΔΟ\s*\d+|\d{1,2}:\d{2}|Νέα\s+Κράτηση|LOCK)', value, re.IGNORECASE)
+        node.replace_with(value if allowed else ('[redacted]' if value else ''))
+    for tag in soup.find_all(True):
+        tag.attrs = {k: v for k, v in tag.attrs.items() if k in ('rowspan', 'colspan') and str(v).isdigit()}
+    return str(soup)
+
+
 def extract(html, day, config):
     soup = BeautifulSoup(html, 'html.parser')
     if soup.select_one('#login_form'):
@@ -139,7 +157,14 @@ def main():
                       wait_until='networkidle')
             if '/login.php' in page.url:
                 raise RuntimeError('OAX login failed or session expired')
-            slots, detail = extract(page.content(), day, config)
+            html = page.content()
+            try:
+                slots, detail = extract(html, day, config)
+            except RuntimeError:
+                if args.diagnose:
+                    Path('calendar-structure.html').write_text(redacted_structure(html))
+                    Path('diagnostics.json').write_text(json.dumps({'date': day, 'structure_recognized': False}))
+                raise
             diagnostics.extend(detail)
             if args.diagnose:
                 continue

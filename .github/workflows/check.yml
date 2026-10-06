@@ -1,5 +1,10 @@
 name: OAX alerts
 on:
+  push:
+    paths:
+      - 'monitor.py'
+      - 'config.json'
+      - '.github/workflows/check.yml'
   schedule:
     - cron: '7,37 * * * *'
   workflow_dispatch:
@@ -32,7 +37,7 @@ jobs:
           OAX_PASSWORD: ${{ secrets.OAX_PASSWORD }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          DIAGNOSE: ${{ inputs.diagnose }}
+          DIAGNOSE: ${{ github.event_name == 'push' || inputs.diagnose }}
         run: |
           if [ "$DIAGNOSE" = "true" ]; then
             python monitor.py --diagnose
@@ -40,10 +45,12 @@ jobs:
             python monitor.py
           fi
       - uses: actions/upload-artifact@v4
-        if: success() && inputs.diagnose
+        if: always() && (github.event_name == 'push' || inputs.diagnose)
         with:
           name: calendar-diagnostics
-          path: diagnostics.json
+          path: |
+            diagnostics.json
+            calendar-structure.html
           retention-days: 3
       - name: Save notification state
         if: always()
